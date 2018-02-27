@@ -1,4 +1,4 @@
-CPP = g++-7
+CPP = g++
 
 # Standard
 FLAGS = -std=gnu++11
