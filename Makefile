@@ -1,13 +1,19 @@
-CPP = g++
+CPP = g++-7
 
-FLAGS = -Ofast -flto -march=native -funroll-loops -Wall -lm -pthread -Wno-unused-result
-FLAGS += -Wno-c++11-extensions
+# Standard
+FLAGS = -std=gnu++11
+# Optimization
+FLAGS += -Ofast -flto -march=native -funroll-loops
+# Warning
+FLAGS += -Wall -Wno-unused-result
+# Msic
+FLAGS += -lm -pthread
 
 
-all: main
+all: learn_suc
 
-main : main.cpp
-	$(CPP) main.cpp -o main $(FLAGS)
+learn_suc : learn_suc.cpp
+	$(CPP) learn_suc.cpp -o learn_suc $(FLAGS)
 
 clean: 
-	rm main
+	rm learn_suc

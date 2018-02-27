@@ -17,31 +17,31 @@
 #include <map>
 #include <set>
 #include <random>
-#include <pthread.h>
 #include <unistd.h>
 #include <iomanip>
+#include <chrono>
 
 using namespace std;
 
 /* Precisions */
-typedef unsigned long ulong;
+typedef long lint;
 typedef double real;
 
 /* Item, item type, and behavior information */
-ulong items_num, itypes_num, behaviors_num;
-vector<ulong> items, itypes;
-map<ulong, ulong> item2itype, item2item_idx, itype2itype_idx, item_idx2itype_idx;
-vector<vector<ulong> > itype_idx2item_indices, behaviors;
+lint items_num, itypes_num, behaviors_num;
+vector<lint> items, itypes;
+map<lint, lint> item2itype, item2item_idx, itype2itype_idx, item_idx2itype_idx;
+vector<vector<lint>> itype_idx2item_indices, behaviors;
 
 /* Embeddings */
-vector<vector<real> > item_embs;
+vector<vector<real>> item_embs;
 
 /* Parameters */
-ulong dim  = 128, threads_num = 4, total_samples = (long)1e6;
+lint dim  = 128, threads_num = 4, total_samples = (lint)1e6;
 real rho = 0.025;
 
 /* Misc */
-ulong curr_samples = 0;
+lint curr_samples = 0;
 real curr_rho = rho;
 
 
@@ -59,10 +59,10 @@ void initialize_item_embs() {
     real low = -1e-3;
     real high = 1e-3;
     uniform_real_distribution<real> dist(low, high);
-    for (int i=0; i<items_num; i++) {
+    for (lint i=0; i<items_num; i++) {
         vector<real> item_emb;
-        item_emb.reserve(dim);  // Avoid re-allocations and improve ~15% efficiency
-        for (int d=0; d<dim; d++) {
+        item_emb.reserve(static_cast<unsigned long>(dim));  // Avoid re-allocations and improve ~15% efficiency
+        for (lint d=0; d<dim; d++) {
             item_emb.push_back(dist(engine));
         }
         item_embs.push_back(item_emb);
@@ -76,8 +76,8 @@ void initialize_item_embs() {
  */
 void *train_learn_suc_thread(void *threadid) {
     auto t_id = (long)threadid;
-    auto checkpoint_interval = (ulong)1e3;
-    ulong t_samples = 0, checkpoint_samples = 0;
+    auto checkpoint_interval = (lint)1e3;
+    lint t_samples = 0, checkpoint_samples = 0;
 
     sleep((unsigned int)t_id + 1);
     //cout << "train_learn_suc_thread(): thread  " << t_id  << " running..." << endl;
@@ -110,7 +110,7 @@ void *train_learn_suc_thread(void *threadid) {
         /* Add thread samples counter */
         t_samples ++;
     }
-    pthread_exit(NULL);
+    pthread_exit(nullptr);
 }
 
 
@@ -124,11 +124,11 @@ void train_learn_suc() {
     cout << "Start training LearnSUC model..." << endl;
     for (t_id = 0; t_id < threads_num; t_id++) {
         //cout << "train_learn_suc(): creating thread " << t_id << endl;
-        pthread_create(&threads[t_id], NULL, train_learn_suc_thread, (void *)t_id);
+        pthread_create(&threads[t_id], nullptr, train_learn_suc_thread, (void *)t_id);
     }
 
     for (t_id = 0; t_id < threads_num; t_id++) {
-        pthread_join(threads[t_id], NULL);
+        pthread_join(threads[t_id], nullptr);
     }
     cout << endl << "Done!" << endl;
 }
@@ -142,15 +142,15 @@ void read_itemlist_file(const string &itemlist_file, char delim='\t') {
     cout << "Input itemlist file: " << itemlist_file << endl;
     ifstream filein(itemlist_file);
 
-    set<ulong> itype_set;
+    set<lint> itype_set;
     /* Make items, item2itype, item2item_idx */
-    ulong item_idx_count = 0;
+    lint item_idx_count = 0;
     for (string line; getline(filein, line); ) {  // item_idx follow input items order
-        vector<ulong> tokens;
+        vector<lint> tokens;
         stringstream ss(line);
         string token;
         while (getline(ss, token, delim)) {
-            tokens.push_back(stoul(token));  // Parse to ulong
+            tokens.push_back(stol(token));  // Parse to lint
         }
         if(tokens.size() != 2) {  // Line format wrong
             cout << "Input itemlist file format wrong!" << endl;
@@ -167,25 +167,25 @@ void read_itemlist_file(const string &itemlist_file, char delim='\t') {
 
     cout << "Indexing item types..."<< endl;
     /* Make itypes, itype2itype_idx */
-    ulong itype_idx_count = 0;
-    for (auto it=itype_set.begin(); it!=itype_set.end(); ++it) {
-        itypes.push_back(*it);
-        itype2itype_idx.insert(make_pair(*it, itype_idx_count));
+    lint itype_idx_count = 0;
+    for (const auto& it: itype_set) {
+        itypes.push_back(it);
+        itype2itype_idx.insert(make_pair(it, itype_idx_count));
         itype_idx_count ++;
     }
     itypes_num = itype2itype_idx.size();
 
-    multimap<ulong, ulong> itype_idx2item_idx;
+    multimap<lint, lint> itype_idx2item_idx;
     /* Make item_idx2itype_idx */
-    for (auto &it : item2itype) {
+    for (const auto& it : item2itype) {
         item_idx2itype_idx.insert(make_pair(item2item_idx[it.first], itype2itype_idx[it.second]));
         itype_idx2item_idx.insert(make_pair(itype2itype_idx[it.second], item2item_idx[it.first]));
     }
 
     /* Make itype_idx2item_indices */
-    for (auto it=itype_set.begin(); it!=itype_set.end(); ++it) {
-        vector<ulong> item_indices;
-        auto range = itype_idx2item_idx.equal_range(itype2itype_idx[*it]);
+    for (const auto& it: itype_set) {
+        vector<lint> item_indices;
+        auto range = itype_idx2item_idx.equal_range(itype2itype_idx[it]);
         for (auto i = range.first; i!=range.second; ++i) {
             item_indices.push_back(i->second);
         }
@@ -197,7 +197,7 @@ void read_itemlist_file(const string &itemlist_file, char delim='\t') {
     itype_idx2item_idx.clear();
     cout << "Done!\t" << "#items: " << items_num << "; #item types: " << itypes_num
          << "; Distribution (type-#): ";
-    for (int i=0; i<itype_idx2item_indices.size(); i++){
+    for (unsigned int i=0; i<itype_idx2item_indices.size(); i++){
         cout << itypes[i] << "-" << itype_idx2item_indices[i].size() << " ";
     }
     cout << endl;
@@ -213,7 +213,7 @@ void read_behaviorlist_file(const string &behaviorlist_file, char delim1='\t', c
     ifstream filein(behaviorlist_file);
 
     /* Make behaviors */
-    set<ulong> items_set(items.begin(), items.end());
+    set<lint> items_set(items.begin(), items.end());
     bool in_items_set;
     for (string line; getline(filein, line); ) {
         vector<string> tokens;
@@ -226,7 +226,7 @@ void read_behaviorlist_file(const string &behaviorlist_file, char delim1='\t', c
             cout << "Input behaviorlist file format wrong!" << endl;
             break;
         } else {
-            vector<ulong> tokens2;
+            vector<lint> tokens2;
             stringstream ss2(tokens[1]);  // tokens[0] for behavior; tokens[1] for items
             string token2;
             while (getline(ss2, token2, delim2)) {
@@ -252,13 +252,23 @@ void output_embs (){
     cout << "Done!" << endl;
 }
 
+//void test_print (){
+//    for (lint i=0; i<itype_idx2item_indices.size(); i++) {
+//        cout << itypes[i] << ": ";
+//        for (const auto& j: itype_idx2item_indices[i]){
+//            cout << items[j] << " ";
+//        }
+//        cout << endl;
+//    }
+//}
+
 
 int main() {
     using clock = chrono::steady_clock;
 
     // TODO: parse arguments from command line
-    string itemlist_file = "data/itemlist.txt";
-    string behaviorlist_file = "data/behaviorlist.txt";
+    string itemlist_file = "data/itemlist-test.txt";
+    string behaviorlist_file = "data/behaviorlist-test.txt";
 
     /* Read in itemlist, behaviorlist files and initialization */
     auto t_i_s = clock::now();
