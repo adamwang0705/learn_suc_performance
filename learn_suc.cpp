@@ -17,9 +17,12 @@
 #include <map>
 #include <set>
 #include <random>
-#include <unistd.h>
 #include <iomanip>
+#include <cstring>
 #include <chrono>
+#include <algorithm>
+
+#define MAX_STR_LEN 100
 
 using namespace std;
 
@@ -32,12 +35,14 @@ lint items_num, itypes_num, behaviors_num;
 vector<lint> items, itypes;
 map<lint, lint> item2itype, item2item_idx, itype2itype_idx, item_idx2itype_idx;
 vector<vector<lint>> itype_idx2item_indices, behaviors;
+vector<real> itype_weights;
 
 /* Embeddings */
 vector<vector<real>> item_embs;
 
 /* Parameters */
-lint dim  = 128, threads_num = 4, total_samples = (lint)1e6;
+char itemlist_file[MAX_STR_LEN], behaviorlist_file[MAX_STR_LEN], output_file[MAX_STR_LEN];
+lint dim  = 128, threads_num = 8, total_samples = (lint)1e3, negative = 10, mode = 1;
 real rho = 0.025;
 
 /* Misc */
@@ -48,8 +53,16 @@ real curr_rho = rho;
 /*
  * Initialize item embeddings
  */
-void initialize_item_embs() {
+void initialize() {
     cout << "Initializing..." << endl;
+
+    /* Item type weights */
+    real default_weight  = 1.0;
+    for (lint i=0; i<itypes_num; ++i) {
+        itype_weights.push_back(default_weight);
+    }
+
+    /* Item embeddings */
     random_device rd;
     /* Random engines */
     mt19937 engine(rd());
@@ -70,20 +83,164 @@ void initialize_item_embs() {
     }
 }
 
+real quick_pos_sinh(real pos_b_norm) {
+    if (pos_b_norm > 10) {
+        return 0;
+    } else if (pos_b_norm < 0.1) {
+        return 100;
+    } else {
+        return 1/pos_b_norm/sinh(pos_b_norm);
+    }
+}
+
+real quick_neg_sinh(real neg_b_norm) {
+    if (neg_b_norm < 0.05 or neg_b_norm > 100) {
+        return 0;
+    } else {
+        return 1/neg_b_norm/neg_b_norm/neg_b_norm/sinh(1/neg_b_norm);
+    }
+}
+
 
 /*
  * Single thread for training LearnSUC model
  */
-void *train_learn_suc_thread(void *threadid) {
-    auto t_id = (long)threadid;
+void *train_learn_suc_thread(void *) {
+    //auto t_id = (long)threadid;
     auto checkpoint_interval = (lint)1e3;
     lint t_samples = 0, checkpoint_samples = 0;
 
-    sleep((unsigned int)t_id + 1);
-    //cout << "train_learn_suc_thread(): thread  " << t_id  << " running..." << endl;
+    random_device rd;
+    mt19937 engine(rd());
 
     while (t_samples < total_samples/threads_num + 1) {
-        // TODO: negative sampling, compute gradient, and update embeddings
+        /* Positive behavior */
+        // Sample a positive behavior index
+        uniform_int_distribution<lint> dis_pos_b(0, behaviors_num);
+        auto pos_b = dis_pos_b(engine);
+
+        auto pos_b_size = behaviors[pos_b].size();
+        vector<lint> pos_b_t_i_counts(static_cast<unsigned long>(itypes_num));
+
+        // Compute pos behavior vector (type weighted sum of item vectors)
+        vector<real> vec_pos_b(static_cast<unsigned long>(dim));
+        for(const auto& i: behaviors[pos_b]) {
+            real tw = itype_weights[item_idx2itype_idx[i]];
+            pos_b_t_i_counts[item_idx2itype_idx[i]] += 1;
+            for(lint d=0; d<dim; ++d) {
+                vec_pos_b[d] += item_embs[i][d] * tw;
+            }
+        }
+
+        // Compute pos behavior norm, pos_sinh
+        real norm_pos_b = 0;
+        for (lint d=0; d<dim; ++d) {
+            norm_pos_b += pow(vec_pos_b[d], 2);
+        }
+        norm_pos_b = sqrt(norm_pos_b);
+        auto pos_b_sinh = quick_pos_sinh(norm_pos_b);
+
+        // Compute gradient
+        vector<real> vec_pos_b_inc(static_cast<unsigned long>(dim));
+        for(lint d=0; d<dim; ++d) {
+            vec_pos_b_inc[d] += pos_b_sinh * vec_pos_b[d];
+        }
+
+        // Update item embeddings
+        for(const auto& i: behaviors[pos_b]) {
+            real tw = itype_weights[item_idx2itype_idx[i]];
+            for(lint d=0; d<dim; ++d) {
+                item_embs[i][d] += vec_pos_b_inc[d] * tw * curr_rho;
+            }
+        }
+
+        /* Negative sampling */
+        for (int n=0; n<negative; ++n) {  // For each negative behavior sampling
+            // Sample a negative behavior
+            set<lint> neg_b_items;
+            unsigned long cum_neg_b_i_count = 0;
+
+            if (mode == 1) {  // size-constrained
+                // Generate samples number of each item type
+                vector<lint> neg_b_t_cuts;
+                uniform_int_distribution<lint> dis_pos_b_t_cut(0, pos_b_size);
+                for (int t=0; t<itypes_num-1; ++t) {
+                    auto t_cut = dis_pos_b_t_cut(engine);
+                    neg_b_t_cuts.push_back(t_cut);
+                }
+                sort(neg_b_t_cuts.begin(), neg_b_t_cuts.end());
+
+                vector<lint> neg_b_t_i_counts(static_cast<unsigned long>(itypes_num));
+                for(int t=0; t<itypes_num; ++t) {
+                    if (t == 0) {
+                        neg_b_t_i_counts.push_back(neg_b_t_cuts[t]);
+                    } else {
+                        neg_b_t_i_counts.push_back(neg_b_t_cuts[t] - neg_b_t_cuts[t-1]);
+                    }
+                }
+                neg_b_t_i_counts.push_back(pos_b_size - neg_b_t_cuts.back());
+
+                for(int t=0; t<itypes_num; ++t) {   // For each item type
+                    uniform_int_distribution<lint> dis_neg_b_t(0, itype_idx2item_indices[t].size());
+
+                    auto t_i_count = neg_b_t_i_counts[t];
+                    cum_neg_b_i_count += t_i_count;
+
+                    // Sample same number of same type items as positive behavior (without duplicates)
+                    while(neg_b_items.size() < cum_neg_b_i_count) {
+                        auto neg_b_t_i = dis_neg_b_t(engine);
+                        neg_b_items.insert(neg_b_t_i);
+                    }
+                }
+            } else if (mode == 2) {  // type-distribution constrained
+                for(int t=0; t<itypes_num; ++t) {   // For each item type
+                    uniform_int_distribution<lint> dis_neg_b_t(0, itype_idx2item_indices[t].size());
+
+                    auto t_i_count = pos_b_t_i_counts[t];
+                    cum_neg_b_i_count += t_i_count;
+
+                    // Sample same number of same type items as positive behavior (without duplicates)
+                    while(neg_b_items.size() < cum_neg_b_i_count) {
+                        auto neg_b_t_i = dis_neg_b_t(engine);
+                        neg_b_items.insert(neg_b_t_i);
+                    }
+                }
+            } else {
+                cout << "Negative sampling mode wrong!" << endl;
+                break;
+            }
+
+            // Compute neg behavior vector (type weighted sum of item vectors)
+            vector<real> vec_neg_b(static_cast<unsigned long>(dim));
+            for(const auto& i: neg_b_items) {
+                real tw = itype_weights[item_idx2itype_idx[i]];
+                for (lint d=0; d<dim; ++d) {
+                    vec_neg_b[d] += item_embs[i][d] * tw ;
+                }
+            }
+
+            // Compute neg behavior norm, pos_sinh
+            real norm_neg_b = 0;
+            for (lint d=0; d<dim; ++d) {
+                norm_neg_b += pow(vec_neg_b[d], 2);
+            }
+            norm_neg_b = sqrt(norm_neg_b);
+            auto neg_b_sinh = quick_neg_sinh(norm_neg_b);
+
+            // Compute gradient
+            vector<real> vec_neg_b_inc(static_cast<unsigned long>(dim));
+            for(lint d=0; d<dim; ++d) {
+                vec_neg_b_inc[d] += neg_b_sinh * vec_neg_b[d];
+            }
+
+            // Update item embeddings
+            for(const auto& i: neg_b_items) {
+                real tw = itype_weights[item_idx2itype_idx[i]];
+                for(lint d=0; d<dim; ++d) {
+                    item_embs[i][d] -= vec_neg_b_inc[d] * tw * curr_rho;
+                }
+            }
+        }
 
         /* Check for checkpoint */
         if (t_samples - checkpoint_samples >= checkpoint_interval) {
@@ -123,8 +280,8 @@ void train_learn_suc() {
 
     cout << "Start training LearnSUC model..." << endl;
     for (t_id = 0; t_id < threads_num; t_id++) {
-        //cout << "train_learn_suc(): creating thread " << t_id << endl;
-        pthread_create(&threads[t_id], nullptr, train_learn_suc_thread, (void *)t_id);
+        //pthread_create(&threads[t_id], nullptr, train_learn_suc_thread, (void *)t_id);
+        pthread_create(&threads[t_id], nullptr, train_learn_suc_thread, nullptr);
     }
 
     for (t_id = 0; t_id < threads_num; t_id++) {
@@ -245,36 +402,58 @@ void read_behaviorlist_file(const string &behaviorlist_file, char delim1='\t', c
     cout << "Done!\t" << "#behaviors: " << behaviors_num << endl;
 }
 
-void output_embs (){
+void output_embs (const string &output_file){
     cout << "Writing out item embeddings..." << endl;
-    // TODO: implement output embeddings
-    sleep(3);
+    ofstream fileout(output_file);
+    /* Write header line */
+    fileout << items_num << "\t" << dim << endl;
+    /* Write embeddings */
+    for (int i=0; i<items_num; ++i) {
+        fileout << items[i] << "\t";
+        for (int d=0; d<dim-1; ++d) {
+            fileout << item_embs[i][d] << "\t";
+        }
+        fileout << item_embs[i].back() << endl;
+    }
     cout << "Done!" << endl;
 }
 
-//void test_print (){
-//    for (lint i=0; i<itype_idx2item_indices.size(); i++) {
-//        cout << itypes[i] << ": ";
-//        for (const auto& j: itype_idx2item_indices[i]){
-//            cout << items[j] << " ";
-//        }
-//        cout << endl;
-//    }
-//}
+int parse_args(char *str, int argc, char **argv) {
+    int a;
+    for (a = 1; a < argc; a++) {
+        if (!strcmp(str, argv[a])) {
+            if (a == argc - 1) {
+                cout << "Argument missing for " << str << endl;
+                exit(1);
+            }
+            return a;
+        }
+    }
+    return -1;
+}
 
 
-int main() {
+int main(int argc, char **argv) {
+    /* Parse arguments */
+    int i;
+    if ((i = parse_args((char *)"--itemlist", argc, argv)) > 0) strcpy(itemlist_file, argv[i + 1]);
+    if ((i = parse_args((char *)"--behaviorlist", argc, argv)) > 0) strcpy(behaviorlist_file, argv[i + 1]);
+    if ((i = parse_args((char *)"--output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
+
+    if ((i = parse_args((char *)"--size", argc, argv)) > 0) dim = stol(argv[i + 1]);
+    if ((i = parse_args((char *)"--mode", argc, argv)) > 0) mode = stol(argv[i + 1]);
+    if ((i = parse_args((char *)"--samples", argc, argv)) > 0) total_samples = stol(argv[i + 1]);
+    if ((i = parse_args((char *)"--negative", argc, argv)) > 0) negative = stol(argv[i + 1]);
+    if ((i = parse_args((char *)"--rho", argc, argv)) > 0) rho = stod(argv[i + 1]);
+    if ((i = parse_args((char *)"--threads", argc, argv)) > 0) threads_num = stol(argv[i + 1]);
+    total_samples *= 1000;
+
     using clock = chrono::steady_clock;
-
-    // TODO: parse arguments from command line
-    string itemlist_file = "data/itemlist-test.txt";
-    string behaviorlist_file = "data/behaviorlist-test.txt";
-
     /* Read in itemlist, behaviorlist files and initialization */
     auto t_i_s = clock::now();
     read_itemlist_file(itemlist_file);
     read_behaviorlist_file(behaviorlist_file);
-    initialize_item_embs();
+    initialize();
     auto t_i_e = clock::now();
     cout << endl;
 
@@ -286,7 +465,7 @@ int main() {
 
     /* Output embedding */
     auto t_o_s = clock::now();
-    output_embs();
+    output_embs(output_file);
     auto t_o_e = clock::now();
     cout << endl;
 
@@ -303,8 +482,6 @@ int main() {
          << " - Output: " << output_time << " s"
             << " (" << (output_time/total_time)*100 << "%)";
     cout << endl;
-
-    /* TEST TEST TEST TEST TEST */
 
     return 0;
 }
