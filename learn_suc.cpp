@@ -65,6 +65,20 @@ void initialize() {
         type_weights.push_back(default_weight);
     }
 
+    /* Temporary weights */
+//    real emph = 2;
+//    real normal = (real)2/3;
+//    type_weights.push_back(normal);
+//    type_weights.push_back(normal);
+//    type_weights.push_back(normal);
+//    type_weights.push_back(emph);
+
+    cout << "Weight scheme (type-weight): ";
+    for (lint t=0; t<types_num; ++t) {
+        cout << t << "-" << type_weights[t] << " ";
+    }
+    cout << endl;
+
     /* Item embeddings */
     random_device rd;
     // Random engines
@@ -276,7 +290,7 @@ void *train_learn_suc_thread(void *thread_id) {
                  << "Current learning rate: " << curr_learning_rate << "; "
                  << fixed << setw(5) << setprecision(2)
                  << "Progress: " << (real)curr_samples_num/total_samples_num*100 << "%\r";
-            //cout.flush();
+            cout.flush();
 
             /* Update learning rate */
             if (curr_learning_rate < learning_rate * 0.0001) {
@@ -456,6 +470,10 @@ int parse_args(char *str, int argc, char **argv) {
 
 
 int main(int argc, char **argv) {
+    strcpy(itemlist_file, "data/demo/itemlist.txt");
+    strcpy(behaviorlist_file, "data/demo/behaviorlist.txt");
+    strcpy(output_file, "embeddings/learn_suc-m2-s75.txt");
+
     cout << "====================================================" << endl;
     /* Parse arguments */
     int i;

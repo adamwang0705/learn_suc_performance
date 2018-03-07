@@ -8,6 +8,7 @@ FLAGS += -Ofast -flto -march=native -funroll-loops
 FLAGS += -Wall -Wno-unused-result
 # Msic
 FLAGS += -lm -pthread
+# FLAGS += -g -O0
 
 
 all: learn_suc
