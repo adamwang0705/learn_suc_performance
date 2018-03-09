@@ -226,7 +226,7 @@ void *train_learn_suc_thread(void *thread_id) {
                     cum_neg_b_i_count += neg_b_t_i_count;
 
                     // Sample type items without duplicates
-                    uniform_int_distribution<lint> dist_t_i_size(0, type_idx2item_indices[t].size());
+                    uniform_int_distribution<lint> dist_t_i_size(0, type_idx2item_indices[t].size()-1);
                     while(neg_b_i_indices.size() < cum_neg_b_i_count) {
                         auto sampled_t_i_idx = type_idx2item_indices[t][dist_t_i_size(engine)];
                         neg_b_i_indices.insert(sampled_t_i_idx);
@@ -239,7 +239,7 @@ void *train_learn_suc_thread(void *thread_id) {
                     cum_neg_b_i_count += pos_b_t_i_count;
 
                     // Sample same number of same type items as positive behavior (without duplicates)
-                    uniform_int_distribution<lint> dist_t_i_size(0, type_idx2item_indices[t].size());
+                    uniform_int_distribution<lint> dist_t_i_size(0, type_idx2item_indices[t].size()-1);
                     while(neg_b_i_indices.size() < cum_neg_b_i_count) {
                         auto sampled_t_i_idx = type_idx2item_indices[t][dist_t_i_size(engine)];
                         neg_b_i_indices.insert(sampled_t_i_idx);
@@ -470,10 +470,6 @@ int parse_args(char *str, int argc, char **argv) {
 
 
 int main(int argc, char **argv) {
-    strcpy(itemlist_file, "data/demo/itemlist.txt");
-    strcpy(behaviorlist_file, "data/demo/behaviorlist.txt");
-    strcpy(output_file, "embeddings/learn_suc-m2-s75.txt");
-
     cout << "====================================================" << endl;
     /* Parse arguments */
     int i;
