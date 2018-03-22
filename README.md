@@ -51,6 +51,6 @@ Other examples are provided in the `./train.sh` file.
 ## Miscellaneous
 **Authors**: Daheng Wang, Meng Jiang, Qingkai Zeng, Zachary Eberhart, Nitesh Chawla\
 **Address**: University of Notre Dame, Notre Dame, Indiana, 46556, USA\
-**Contact**: {dwang8,mjiang2,qzeng,zeberhar,nchawla}@nd.edu\
+**Contact**: {dwang8,mjiang2,qzeng,zeberhar,nchawla}@nd.edu
 
 If you find this code package to be useful, please consider cite the original paper: Multi-Type Itemset Embedding for Learning Behavior Success.
