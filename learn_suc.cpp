@@ -21,6 +21,7 @@
 #include <cstring>
 #include <chrono>
 #include <algorithm>
+#include <cmath>
 //#include <thread>
 
 #define MAX_STR_LEN 100
