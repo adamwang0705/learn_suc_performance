@@ -116,9 +116,9 @@ void *train_learn_suc_thread(void *) {
 
     random_device rd;
     mt19937 engine(rd());
-    auto task_samples = (real)total_samples_num/threads_num/checkpoints_interval;
-    task_samples = ceil(task_samples) * checkpoints_interval;
-    while (thread_samples <= (lint)task_samples) {
+    //auto task_samples = (real)total_samples_num/threads_num/checkpoints_interval;
+    //task_samples = ceil(task_samples) * checkpoints_interval;
+    while (thread_samples <= (total_samples_num/threads_num + 1)) {
         /*
          * Sample positive behavior
          * */
@@ -248,6 +248,9 @@ void *train_learn_suc_thread(void *) {
             }
         }
 
+        /* Increase thread samples counter */
+        thread_samples ++;
+
         /* Check for checkpoint */
         if (thread_samples - checkpoint_samples >= checkpoints_interval) {
             /* Update checkpoint */
@@ -259,9 +262,6 @@ void *train_learn_suc_thread(void *) {
             // May slight affect efficiency if checkpoints_interval is too small
             pthread_mutex_lock(&cout_mutex);
             auto prog = (real)curr_samples_num/total_samples_num*100;
-            if (prog > 100) {
-                pthread_exit(nullptr);
-            }
             cout << fixed << setw(10) << setprecision(6)
                  << "Current learning rate: " << curr_learning_rate << "; "
                  << fixed << setw(5) << setprecision(2)
@@ -277,9 +277,6 @@ void *train_learn_suc_thread(void *) {
                 curr_learning_rate = learning_rate * (1 - ((real)curr_samples_num/total_samples_num));
             }
         }
-
-        /* Increase thread samples counter */
-        thread_samples ++;
     }
     pthread_exit(nullptr);
 }
