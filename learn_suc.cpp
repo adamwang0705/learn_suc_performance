@@ -21,7 +21,7 @@
 #include <cstring>
 #include <chrono>
 #include <algorithm>
-#include <thread>
+//#include <thread>
 
 #define MAX_STR_LEN 100
 
@@ -107,15 +107,17 @@ real quick_neg_b_sinh(real& neg_b_norm, int optimization=1) {
 /*
  * Thread for training LearnSUC model
  */
-void *train_learn_suc_thread(void *thread_id) {
-    auto th_id = (long)thread_id;
-    this_thread::sleep_for(std::chrono::milliseconds(100*th_id));
+void *train_learn_suc_thread(void *) {
+    //auto th_id = (long)thread_id;
+    //this_thread::sleep_for(std::chrono::milliseconds(100*th_id));
     auto checkpoints_interval = (lint)1000;
     lint thread_samples = 0, checkpoint_samples = 0;
 
     random_device rd;
     mt19937 engine(rd());
-    while (thread_samples < (total_samples_num / threads_num + 1)) {
+    auto task_samples = (real)total_samples_num/threads_num/checkpoints_interval;
+    task_samples = ceil(task_samples) * checkpoints_interval;
+    while (thread_samples < (lint)task_samples) {
         /*
          * Sample positive behavior
          * */
@@ -248,17 +250,21 @@ void *train_learn_suc_thread(void *thread_id) {
         /* Check for checkpoint */
         if (thread_samples - checkpoint_samples >= checkpoints_interval) {
             /* Update checkpoint */
-            curr_samples_num += checkpoints_interval;
+            curr_samples_num += (thread_samples-checkpoint_samples);
             checkpoint_samples = thread_samples;
 
             /* Report progress */
             // Use mutex to avoid corrupting cout by multiple threads
             // May slight affect efficiency if checkpoints_interval is too small
             pthread_mutex_lock(&cout_mutex);
+            auto prog = (real)curr_samples_num/total_samples_num*100;
+            if (prog > 1) {
+                prog = 1.0;
+            }
             cout << fixed << setw(10) << setprecision(6)
                  << "Current learning rate: " << curr_learning_rate << "; "
                  << fixed << setw(5) << setprecision(2)
-                 << "Progress: " << (real)curr_samples_num/total_samples_num*100 << "%\r";
+                 << "Progress: " << prog << "%\r";
             cout.flush();
             pthread_mutex_unlock(&cout_mutex);
 
@@ -287,8 +293,8 @@ void train_learn_suc() {
 
     cout << "Start training LearnSUC model..." << endl;
     for (thread_id=0; thread_id<threads_num; ++thread_id) {
-        pthread_create(&threads[thread_id], nullptr, train_learn_suc_thread, (void *)thread_id);
-        //pthread_create(&threads[thread_id], nullptr, train_learn_suc_thread, nullptr);
+        //pthread_create(&threads[thread_id], nullptr, train_learn_suc_thread, (void *)thread_id);
+        pthread_create(&threads[thread_id], nullptr, train_learn_suc_thread, nullptr);
     }
     for (thread_id=0; thread_id<threads_num; ++thread_id) {
         pthread_join(threads[thread_id], nullptr);
