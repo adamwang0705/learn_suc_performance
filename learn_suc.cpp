@@ -21,7 +21,7 @@
 #include <cstring>
 #include <chrono>
 #include <algorithm>
-#include <cmath>
+//#include <cmath>
 //#include <thread>
 
 #define MAX_STR_LEN 100
@@ -119,7 +119,6 @@ void *train_learn_suc_thread(void *) {
     //auto task_samples = (real)total_samples_num/threads_num/checkpoints_interval;
     //task_samples = ceil(task_samples) * checkpoints_interval;
     for (thread_samples=0; thread_samples<=(total_samples_num/threads_num+1); thread_samples++) {
-    //while (thread_samples <= (total_samples_num/threads_num + 1)) {
         /*
          * Sample positive behavior
          * */
@@ -249,11 +248,8 @@ void *train_learn_suc_thread(void *) {
             }
         }
 
-        /* Increase thread samples counter */
-        //thread_samples ++;
-
         /* Check for checkpoint */
-        if (thread_samples - checkpoint_samples >= checkpoints_interval) {
+        if (thread_samples - checkpoint_samples == checkpoints_interval) {
             /* Update checkpoint */
             curr_samples_num += (thread_samples-checkpoint_samples);
             checkpoint_samples = thread_samples;
