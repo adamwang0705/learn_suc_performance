@@ -118,7 +118,8 @@ void *train_learn_suc_thread(void *) {
     mt19937 engine(rd());
     //auto task_samples = (real)total_samples_num/threads_num/checkpoints_interval;
     //task_samples = ceil(task_samples) * checkpoints_interval;
-    while (thread_samples <= (total_samples_num/threads_num + 1)) {
+    for (thread_samples=0; thread_samples<=(total_samples_num/threads_num+1); thread_samples++) {
+    //while (thread_samples <= (total_samples_num/threads_num + 1)) {
         /*
          * Sample positive behavior
          * */
@@ -249,7 +250,7 @@ void *train_learn_suc_thread(void *) {
         }
 
         /* Increase thread samples counter */
-        thread_samples ++;
+        //thread_samples ++;
 
         /* Check for checkpoint */
         if (thread_samples - checkpoint_samples >= checkpoints_interval) {
