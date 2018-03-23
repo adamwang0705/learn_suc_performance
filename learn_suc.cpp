@@ -21,6 +21,7 @@
 #include <cstring>
 #include <chrono>
 #include <algorithm>
+#include <thread>
 
 #define MAX_STR_LEN 100
 
@@ -106,8 +107,9 @@ real quick_neg_b_sinh(real& neg_b_norm, int optimization=1) {
 /*
  * Thread for training LearnSUC model
  */
-void *train_learn_suc_thread(void *) {
-    //auto th_id = (long)thread_id;
+void *train_learn_suc_thread(void *thread_id) {
+    auto th_id = (long)thread_id;
+    this_thread::sleep_for(std::chrono::milliseconds(100*th_id));
     auto checkpoints_interval = (lint)1000;
     lint thread_samples = 0, checkpoint_samples = 0;
 
@@ -285,8 +287,8 @@ void train_learn_suc() {
 
     cout << "Start training LearnSUC model..." << endl;
     for (thread_id=0; thread_id<threads_num; ++thread_id) {
-        //pthread_create(&threads[thread_id], nullptr, train_learn_suc_thread, (void *)thread_id);
-        pthread_create(&threads[thread_id], nullptr, train_learn_suc_thread, nullptr);
+        pthread_create(&threads[thread_id], nullptr, train_learn_suc_thread, (void *)thread_id);
+        //pthread_create(&threads[thread_id], nullptr, train_learn_suc_thread, nullptr);
     }
     for (thread_id=0; thread_id<threads_num; ++thread_id) {
         pthread_join(threads[thread_id], nullptr);
