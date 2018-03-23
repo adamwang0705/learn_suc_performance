@@ -108,7 +108,7 @@ real quick_neg_b_sinh(real& neg_b_norm, int optimization=1) {
  */
 void *train_learn_suc_thread(void *) {
     //auto th_id = (long)thread_id;
-    auto checkpoints_interval = (lint)500;
+    auto checkpoints_interval = (lint)1000;
     lint thread_samples = 0, checkpoint_samples = 0;
 
     random_device rd;
