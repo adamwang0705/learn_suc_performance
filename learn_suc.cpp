@@ -259,8 +259,8 @@ void *train_learn_suc_thread(void *) {
             // May slight affect efficiency if checkpoints_interval is too small
             pthread_mutex_lock(&cout_mutex);
             auto prog = (real)curr_samples_num/total_samples_num*100;
-            if (prog > 1) {
-                prog = 1.0;
+            if (prog > 100) {
+                prog = 100.0;
             }
             cout << fixed << setw(10) << setprecision(6)
                  << "Current learning rate: " << curr_learning_rate << "; "
