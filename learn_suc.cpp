@@ -118,7 +118,7 @@ void *train_learn_suc_thread(void *) {
     mt19937 engine(rd());
     auto task_samples = (real)total_samples_num/threads_num/checkpoints_interval;
     task_samples = ceil(task_samples) * checkpoints_interval;
-    while (thread_samples < (lint)task_samples) {
+    while (thread_samples <= (lint)task_samples) {
         /*
          * Sample positive behavior
          * */
@@ -260,7 +260,7 @@ void *train_learn_suc_thread(void *) {
             pthread_mutex_lock(&cout_mutex);
             auto prog = (real)curr_samples_num/total_samples_num*100;
             if (prog > 100) {
-                prog = 100.0;
+                pthread_exit(nullptr);
             }
             cout << fixed << setw(10) << setprecision(6)
                  << "Current learning rate: " << curr_learning_rate << "; "
