@@ -21,6 +21,7 @@
 #include <cstring>
 #include <chrono>
 #include <algorithm>
+#include <array>
 //#include <cmath>
 //#include <thread>
 
@@ -114,8 +115,16 @@ void *train_learn_suc_thread(void *) {
     auto checkpoints_interval = (lint)1000;
     lint thread_samples = 0, checkpoint_samples = 0;
 
+    //random_device rd;
+    //mt19937 engine(rd());
+
+    //DEBUG
     random_device rd;
-    mt19937 engine(rd());
+    array<int, mt19937::state_size> seed_data;
+    generate_n(seed_data.data(), seed_data.size(), ref(rd));
+    seed_seq seq(begin(seed_data), end(seed_data));
+    mt19937 engine(seq);
+
     //auto job_samples = (real)total_samples_num/threads_num/checkpoints_interval;
     //job_samples = ceil(job_samples) * checkpoints_interval;
     auto job_samples = total_samples_num / threads_num + 1;
