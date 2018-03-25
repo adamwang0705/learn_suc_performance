@@ -22,6 +22,7 @@
 #include <chrono>
 #include <algorithm>
 #include <array>
+#include <functional>
 //#include <cmath>
 //#include <thread>
 
