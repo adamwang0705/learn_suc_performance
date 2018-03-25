@@ -29,7 +29,7 @@
 using namespace std;
 
 /* Precisions */
-typedef long lint;
+typedef long long int lint;
 typedef double real;
 
 /* Item, type, and behavior information */
@@ -116,9 +116,10 @@ void *train_learn_suc_thread(void *) {
 
     random_device rd;
     mt19937 engine(rd());
-    //auto task_samples = (real)total_samples_num/threads_num/checkpoints_interval;
-    //task_samples = ceil(task_samples) * checkpoints_interval;
-    for (thread_samples=0; thread_samples<=(total_samples_num/threads_num+1); thread_samples++) {
+    //auto job_samples = (real)total_samples_num/threads_num/checkpoints_interval;
+    //job_samples = ceil(job_samples) * checkpoints_interval;
+    auto job_samples = total_samples_num / threads_num + 1;
+    for (thread_samples = 0; thread_samples <= job_samples; thread_samples ++) {
         /*
          * Sample positive behavior
          * */
@@ -173,7 +174,7 @@ void *train_learn_suc_thread(void *) {
                     // Generate samples number of each item type
                     // Randomly cut positive behavior size into types number parts
                     vector<lint> neg_b_t_cuts(static_cast<unsigned long>(types_num - 1));
-                    uniform_int_distribution<lint> dist_pos_b_size(0, pos_b_size - 1);
+                    uniform_int_distribution<lint> dist_pos_b_size(0, (lint)(pos_b_size - 1));
                     for (lint c = 0; c < types_num - 1; ++c) {
                         neg_b_t_cuts[c] = dist_pos_b_size(engine);
                     }
@@ -188,7 +189,7 @@ void *train_learn_suc_thread(void *) {
                             neg_b_t_i_counts[t] = neg_b_t_cuts[t] - neg_b_t_cuts[t - 1];
                         }
                     }
-                    neg_b_t_i_counts.back() = pos_b_size - neg_b_t_cuts.back();
+                    neg_b_t_i_counts.back() = (lint)pos_b_size - neg_b_t_cuts.back();
 
                     // Generate random item indices in each type
                     for (const auto &t: types) {
@@ -196,7 +197,7 @@ void *train_learn_suc_thread(void *) {
                         const auto &neg_b_t_i_count = neg_b_t_i_counts[type_idx];
                         cum_neg_b_i_count += neg_b_t_i_count;
                         // Sample type items without duplicates
-                        uniform_int_distribution<lint> dist_t_i_size(0, type_idx2item_indices[type_idx].size() - 1);
+                        uniform_int_distribution<lint> dist_t_i_size(0, (lint)(type_idx2item_indices[type_idx].size() - 1));
                         while (neg_b_i_indices.size() < cum_neg_b_i_count) {
                             const auto &sampled_t_i_idx = type_idx2item_indices[type_idx][dist_t_i_size(engine)];
                             neg_b_i_indices.insert(sampled_t_i_idx);
@@ -209,7 +210,7 @@ void *train_learn_suc_thread(void *) {
                         const auto &pos_b_t_i_count = pos_b_t_i_counts[type_idx];
                         cum_neg_b_i_count += pos_b_t_i_count;
                         // Sample type items without duplicates
-                        uniform_int_distribution<lint> dist_t_i_size(0, type_idx2item_indices[type_idx].size() - 1);
+                        uniform_int_distribution<lint> dist_t_i_size(0, (lint)(type_idx2item_indices[type_idx].size() - 1));
                         while (neg_b_i_indices.size() < cum_neg_b_i_count) {
                             const auto &sampled_t_i_idx = type_idx2item_indices[type_idx][dist_t_i_size(engine)];
                             neg_b_i_indices.insert(sampled_t_i_idx);
@@ -249,9 +250,9 @@ void *train_learn_suc_thread(void *) {
         }
 
         /* Check for checkpoint */
-        if (thread_samples - checkpoint_samples == checkpoints_interval) {
+        if (thread_samples - checkpoint_samples == checkpoints_interval || thread_samples == job_samples) {
             /* Update checkpoint */
-            curr_samples_num += (thread_samples-checkpoint_samples);
+            curr_samples_num += checkpoints_interval;
             checkpoint_samples = thread_samples;
 
             /* Report progress */
@@ -267,11 +268,12 @@ void *train_learn_suc_thread(void *) {
             pthread_mutex_unlock(&cout_mutex);
 
             /* Update learning rate */
-            if (curr_learning_rate < learning_rate * 0.0001) {
+            auto next_learning_rate = learning_rate * (1 - ((real)curr_samples_num/total_samples_num));
+            if (next_learning_rate < learning_rate * 0.0001) {
                 // Set minial learning rate
                 curr_learning_rate = learning_rate * 0.0001;
             } else {
-                curr_learning_rate = learning_rate * (1 - ((real)curr_samples_num/total_samples_num));
+                curr_learning_rate = next_learning_rate;
             }
         }
     }
@@ -330,7 +332,7 @@ void read_itemlist_file(const string& itemlist_file, char delim='\t') {
             types_set.insert(tokens[1]);
         }
     }
-    items_num = item2type.size();
+    items_num = (lint)item2type.size();
 
     cout << "Indexing item types..."<< endl;
     /* Populate types, type2type_idx */
@@ -340,7 +342,7 @@ void read_itemlist_file(const string& itemlist_file, char delim='\t') {
         type2type_idx.insert(make_pair(t, type_idx_count));
         type_idx_count ++;
     }
-    types_num = type2type_idx.size();
+    types_num = (lint)type2type_idx.size();
 
     multimap<lint, lint> type_idx22item_idx;
     /* Populate item_idx2type_idx */
@@ -414,7 +416,7 @@ void read_behaviorlist_file(const string& behaviorlist_file, char delim_l1='\t',
             behavior_idx_count ++;
         }
     }
-    behaviors_num = behaviors.size();
+    behaviors_num = (lint)behaviors.size();
     cout << "Done!\t" << "#behaviors: " << behaviors_num << endl;
 }
 
